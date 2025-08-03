@@ -1,11 +1,11 @@
+import { CheckService } from "../domain/use-cases/checks/check-service";
 import { CronService } from "./cron/cron-service";
 
 export class Server {
   public static start() {
     console.log("Server is running ");
-    CronService.createJob("*/5 * * * * *", () => {
-      const date = new Date();
-      console.log("5 seconds passed", date);
+    CronService.createJob("*/5 * * * * *", async () => {
+      await new CheckService().execute("https://www.google.com");
     });
   }
 }
