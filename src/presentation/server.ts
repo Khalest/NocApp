@@ -5,7 +5,12 @@ export class Server {
   public static start() {
     console.log("Server is running ");
     CronService.createJob("*/5 * * * * *", async () => {
-      await new CheckService().execute("https://www.google.com");
+      // Dependency Injection
+      const checkService = new CheckService(
+        () => console.log("success"),
+        (error) => console.log(error)
+      );
+      await checkService.execute("https://www.google.com");
     });
   }
 }
