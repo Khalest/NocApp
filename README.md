@@ -66,10 +66,6 @@ graph TB
     I --> F
     H --> I
 
-    style D fill:#e1f5fe
-    style G fill:#e8f5e8
-    style E fill:#fff3e0
-    style F fill:#fff3e0
     C --> E
     E --> F
     F --> G
