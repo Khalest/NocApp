@@ -1,12 +1,16 @@
-interface ICheckService {
+import { LogEntity, LogSeverityLevel } from "@domain/entities/log.entity";
+import { LogRepository } from "@domain/repository/log.repository";
+
+interface CheckServiceInterface {
   execute(url: string): Promise<boolean>;
 }
 
 type SuccessCallback = () => void;
 type ErrorCallback = (error: string) => void;
 
-export class CheckService implements ICheckService {
+export class CheckServiceUC implements CheckServiceInterface {
   constructor(
+    private readonly logRepository: LogRepository,
     private readonly successCallback: SuccessCallback,
     private readonly errorCallback: ErrorCallback
   ) {}
@@ -15,9 +19,13 @@ export class CheckService implements ICheckService {
     try {
       const req = await fetch(url);
       if (!req.ok) throw new Error(`Error on check service ${url}`);
+      const logEntity = new LogEntity(`Service ${url} is working correctly`, LogSeverityLevel.low);
+      this.logRepository.saveLog(logEntity);
       this.successCallback();
       return true;
     } catch (error) {
+      const logEntity = new LogEntity(`Error ${error}`, LogSeverityLevel.high);
+      this.logRepository.saveLog(logEntity);
       this.errorCallback(`${error}`);
       return false;
     }
