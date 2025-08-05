@@ -2,9 +2,10 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9.2-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![Clean Architecture](https://img.shields.io/badge/Architecture-Clean-brightgreen.svg)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 [![License](https://img.shields.io/badge/License-ISC-yellow.svg)](LICENSE)
 
-Un sistema de monitoreo de red (NOC) construido con TypeScript que supervisa la disponibilidad de servicios web mediante verificaciones programadas usando cron jobs.
+Un sistema de monitoreo de red (NOC) construido con TypeScript que supervisa la disponibilidad de servicios web mediante verificaciones programadas usando cron jobs. Implementa Clean Architecture con sistema completo de logging y persistencia en archivos.
 
 ## 📋 Tabla de Contenidos
 
@@ -23,11 +24,13 @@ Un sistema de monitoreo de red (NOC) construido con TypeScript que supervisa la 
 ## ✨ Características
 
 - 🔍 **Monitoreo Continuo**: Verificaciones automáticas de servicios web cada 5 segundos
-- 📊 **Sistema de Logs**: Registro detallado con niveles de severidad
-- 🏗️ **Arquitectura Limpia**: Implementación basada en Clean Architecture
+- 📊 **Sistema de Logs Avanzado**: Registro detallado con niveles de severidad y persistencia en archivos
+- 🏗️ **Arquitectura Limpia**: Implementación completa de Clean Architecture con separación de capas
 - ⚡ **TypeScript**: Desarrollo type-safe con las últimas características de ES
 - 🔄 **Cron Jobs**: Programación flexible de tareas de monitoreo
-- 📈 **Escalable**: Diseño modular para fácil extensión
+- 💾 **Persistencia de Datos**: Sistema de archivos para almacenamiento de logs por severidad
+- 🔧 **Inyección de Dependencias**: Patrón de inversión de dependencias implementado
+- 📈 **Escalable**: Diseño modular para fácil extensión y mantenimiento
 
 ## 🏛️ Arquitectura
 
@@ -40,21 +43,33 @@ graph TB
     end
 
     subgraph "Application Layer"
-        C[CheckService]
+        C[CheckServiceUC]
     end
 
     subgraph "Domain Layer"
         D[LogEntity]
-        E[LogRepository]
-        F[LogDataSource]
+        E[LogRepository Abstract]
+        F[LogDatasource Abstract]
+        G[LogSeverityLevel Enum]
     end
 
     subgraph "Infrastructure Layer"
-        G[FileSystemDataSource]
+        H[ILogRepository]
+        I[FileSystemDataSource]
     end
 
     A --> C
     C --> D
+    C --> E
+    E --> F
+    H --> E
+    I --> F
+    H --> I
+
+    style D fill:#e1f5fe
+    style G fill:#e8f5e8
+    style E fill:#fff3e0
+    style F fill:#fff3e0
     C --> E
     E --> F
     F --> G
@@ -64,16 +79,24 @@ graph TB
 
 ```
 src/
-├── domain/                 # Lógica de negocio
-│   ├── entities/          # Entidades del dominio
-│   ├── repository/        # Interfaces de repositorios
-│   ├── datasources/       # Interfaces de fuentes de datos
-│   └── use-cases/         # Casos de uso
-├── infrastructure/        # Implementaciones técnicas
-│   └── datasources/       # Implementaciones de fuentes de datos
-└── presentation/          # Capa de presentación
-    ├── cron/             # Servicios de programación
-    └── server.ts         # Servidor principal
+├── domain/                    # Lógica de negocio
+│   ├── entities/             # Entidades del dominio
+│   │   └── log.entity.ts     # Entidad de logs con fromJson
+│   ├── repository/           # Interfaces de repositorios
+│   │   └── log.repository.ts # Repositorio abstracto
+│   ├── datasources/          # Interfaces de fuentes de datos
+│   │   └── log.datasource.ts # DataSource abstracto
+│   └── use-cases/            # Casos de uso
+│       └── checks/           # Servicios de verificación
+├── infrastructure/           # Implementaciones técnicas
+│   ├── datasources/          # Implementaciones de fuentes de datos
+│   │   └── file-system.datasource.ts # Persistencia en archivos
+│   └── repository/           # Implementaciones de repositorios
+│       └── log.repository.impl.ts # Implementación del repositorio
+└── presentation/             # Capa de presentación
+    ├── cron/                # Servicios de programación
+    │   └── cron-service.ts  # Manejo de cron jobs
+    └── server.ts            # Servidor principal con DI
 ```
 
 ## 🚀 Instalación
@@ -122,6 +145,9 @@ DEFAULT_URL=https://www.google.com
 # Configuración de logs
 LOG_LEVEL=info
 LOG_FILE_PATH=./logs
+LOG_ALL_FILE=logs-all.log
+LOG_MEDIUM_FILE=logs-medium.log
+LOG_HIGH_FILE=logs-high.log
 
 # Base de datos
 DB_HOST=localhost
@@ -156,11 +182,18 @@ Server.start();
 ### Configuración de Monitoreo
 
 ```typescript
-import { CheckService } from "./domain/use-cases/checks/check-service";
+import { CheckServiceUC } from "./domain/use-cases/checks/check-service";
 import { CronService } from "./presentation/cron/cron-service";
+import { FileSystemDataSource } from "./infrastructure/datasources/file-system.datasource";
+import { ILogRepository } from "./infrastructure/repository/log.repository.impl";
 
-// Crear servicio de verificación
-const checkService = new CheckService(
+// Configurar dependencias
+const fileSystemDataSource = new FileSystemDataSource();
+const logRepository = new ILogRepository(fileSystemDataSource);
+
+// Crear servicio de verificación con logging
+const checkService = new CheckServiceUC(
+  logRepository,
   () => console.log("✅ Servicio disponible"),
   (error) => console.log("❌ Error:", error)
 );
@@ -169,6 +202,58 @@ const checkService = new CheckService(
 CronService.createJob("*/30 * * * * *", async () => {
   await checkService.execute("https://mi-servicio.com");
 });
+```
+
+## 📊 Sistema de Logging
+
+### Niveles de Severidad
+
+| Nivel    | Descripción                                | Archivo de Destino                                 |
+| -------- | ------------------------------------------ | -------------------------------------------------- |
+| `low`    | Información general, servicios funcionando | `logs-all.log`                                     |
+| `medium` | Advertencias, latencia alta                | `logs-all.log`, `logs-medium.log`                  |
+| `high`   | Errores críticos, servicios caídos         | `logs-all.log`, `logs-medium.log`, `logs-high.log` |
+
+### Estructura de Logs
+
+```mermaid
+flowchart TD
+    A[LogEntity] --> B{Nivel de Severidad}
+    B -->|low| C[logs-all.log]
+    B -->|medium| D[logs-all.log + logs-medium.log]
+    B -->|high| E[logs-all.log + logs-medium.log + logs-high.log]
+
+    F[FileSystemDataSource] --> G[Crear directorio logs/]
+    G --> H[Inicializar archivos]
+    H --> I[Escribir logs JSON]
+```
+
+### Formato de Logs
+
+Cada log se almacena como una línea JSON con la siguiente estructura:
+
+```json
+{
+  "level": "high",
+  "message": "Error on check service https://example.com",
+  "createdAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### Recuperación de Logs
+
+```typescript
+// Obtener todos los logs
+const allLogs = await logRepository.getLogs(LogSeverityLevel.low);
+
+// Obtener solo logs de advertencia y críticos
+const warningLogs = await logRepository.getLogs(LogSeverityLevel.medium);
+
+// Obtener solo logs críticos
+const criticalLogs = await logRepository.getLogs(LogSeverityLevel.high);
+
+// Deserializar log desde JSON
+const logFromJson = LogEntity.fromJson(jsonString);
 ```
 
 ## 🌐 API Endpoints
@@ -415,19 +500,20 @@ docker-compose down
 ### Ejemplo 1: Monitoreo Básico
 
 ```typescript
-import { CheckService } from "@domain/use-cases/checks/check-service";
+import { CheckServiceUC } from "@domain/use-cases/checks/check-service";
 import { LogEntity, LogSeverityLevel } from "@domain/entities/log.entity";
+import { FileSystemDataSource } from "@infrastructure/datasources/file-system.datasource";
+import { ILogRepository } from "@infrastructure/repository/log.repository.impl";
 
 const monitorService = async () => {
-  const checkService = new CheckService(
-    () => {
-      const log = new LogEntity("Service is up", LogSeverityLevel.low);
-      console.log("✅", log.message);
-    },
-    (error) => {
-      const log = new LogEntity(error, LogSeverityLevel.high);
-      console.log("❌", log.message);
-    }
+  // Configurar sistema de logging
+  const fileSystemDataSource = new FileSystemDataSource();
+  const logRepository = new ILogRepository(fileSystemDataSource);
+
+  const checkService = new CheckServiceUC(
+    logRepository,
+    () => console.log("✅ Servicio disponible - Log guardado"),
+    (error) => console.log("❌ Error registrado:", error)
   );
 
   // Verificar múltiples servicios
@@ -440,6 +526,10 @@ const monitorService = async () => {
   for (const service of services) {
     await checkService.execute(service);
   }
+
+  // Obtener logs por severidad
+  const highSeverityLogs = await logRepository.getLogs(LogSeverityLevel.high);
+  console.log("Logs críticos:", highSeverityLogs.length);
 };
 
 monitorService();
@@ -471,29 +561,58 @@ CronService.createJob(cronPatterns.every5Minutes, async () => {
 });
 ```
 
-### Ejemplo 3: Integración con Base de Datos
+### Ejemplo 3: Sistema de Archivos de Logs
 
 ```typescript
-import { LogRepository } from "@domain/repository/log.repository";
+import { LogEntity, LogSeverityLevel } from "@domain/entities/log.entity";
 import { FileSystemDataSource } from "@infrastructure/datasources/file-system.datasource";
+import { ILogRepository } from "@infrastructure/repository/log.repository.impl";
 
-class DatabaseExample {
-  private logRepository: LogRepository;
+class LoggingExample {
+  private logRepository: ILogRepository;
 
   constructor() {
-    const dataSource = new FileSystemDataSource();
-    this.logRepository = new LogRepository(dataSource);
+    const fileSystemDataSource = new FileSystemDataSource();
+    this.logRepository = new ILogRepository(fileSystemDataSource);
   }
 
-  async saveLog(message: string, level: LogSeverityLevel) {
-    const log = new LogEntity(message, level);
-    await this.logRepository.saveLog(log);
+  async demonstrateLogging() {
+    // Crear logs de diferentes severidades
+    const lowLog = new LogEntity("Sistema iniciado correctamente", LogSeverityLevel.low);
+    const mediumLog = new LogEntity(
+      "Advertencia: Latencia alta detectada",
+      LogSeverityLevel.medium
+    );
+    const highLog = new LogEntity("Error crítico: Servicio no disponible", LogSeverityLevel.high);
+
+    // Guardar logs (se almacenan automáticamente en archivos separados)
+    await this.logRepository.saveLog(lowLog);
+    await this.logRepository.saveLog(mediumLog);
+    await this.logRepository.saveLog(highLog);
+
+    // Recuperar logs por severidad
+    const allLogs = await this.logRepository.getLogs(LogSeverityLevel.low); // Todos los logs
+    const mediumLogs = await this.logRepository.getLogs(LogSeverityLevel.medium); // Solo medium y high
+    const criticalLogs = await this.logRepository.getLogs(LogSeverityLevel.high); // Solo high
+
+    console.log(`Total logs: ${allLogs.length}`);
+    console.log(`Logs de advertencia y críticos: ${mediumLogs.length}`);
+    console.log(`Logs críticos: ${criticalLogs.length}`);
   }
 
-  async getLogs(level?: LogSeverityLevel) {
-    return await this.logRepository.getLogs(level);
+  // Ejemplo de deserialización desde JSON
+  loadLogFromJson() {
+    const jsonLog = '{"message":"Test log","level":"high","createdAt":"2023-01-01T00:00:00.000Z"}';
+    const logEntity = LogEntity.fromJson(jsonLog);
+    console.log("Log cargado:", logEntity);
   }
 }
+
+// Estructura de archivos creada automáticamente:
+// logs/
+// ├── logs-all.log      # Todos los logs (low, medium, high)
+// ├── logs-medium.log   # Logs medium y high
+// └── logs-high.log     # Solo logs high (críticos)
 ```
 
 ### Ejemplo 4: Solicitudes HTTP
@@ -589,13 +708,21 @@ flowchart LR
 
 ### Roadmap
 
-- [ ] Interfaz web para monitoreo
-- [ ] Integración con Slack/Discord
+- [x] Sistema de logging con archivos separados por severidad
+- [x] Implementación completa de Clean Architecture
+- [x] Inyección de dependencias
+- [x] Deserialización de logs desde JSON
+- [ ] Interfaz web para monitoreo de logs
+- [ ] Rotación automática de archivos de logs
+- [ ] Integración con Slack/Discord para alertas
 - [ ] Métricas avanzadas con Prometheus
-- [ ] Soporte para múltiples bases de datos
+- [ ] Soporte para múltiples bases de datos (PostgreSQL, MongoDB)
+- [ ] API REST completa para gestión de logs
 - [ ] API GraphQL
 - [ ] Autenticación y autorización
 - [ ] Clustering y alta disponibilidad
+- [ ] Compresión de logs antiguos
+- [ ] Dashboard en tiempo real
 
 ## 📄 Licencia
 
