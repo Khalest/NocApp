@@ -5,8 +5,8 @@ interface CheckServiceInterface {
   execute(url: string): Promise<boolean>;
 }
 
-type SuccessCallback = () => void;
-type ErrorCallback = (error: string) => void;
+type SuccessCallback = () => void | undefined;
+type ErrorCallback = (error: string) => void | undefined;
 
 export class CheckServiceUC implements CheckServiceInterface {
   constructor(
