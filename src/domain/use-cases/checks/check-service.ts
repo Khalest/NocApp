@@ -19,12 +19,22 @@ export class CheckServiceUC implements CheckServiceInterface {
     try {
       const req = await fetch(url);
       if (!req.ok) throw new Error(`Error on check service ${url}`);
-      const logEntity = new LogEntity(`Service ${url} is working correctly`, LogSeverityLevel.low);
+      const logEntity = new LogEntity({
+        origin: "CheckServiceUC",
+        message: `Service ${url} is working correctly`,
+        level: LogSeverityLevel.low,
+        createdAt: new Date(),
+      });
       this.logRepository.saveLog(logEntity);
       this.successCallback();
       return true;
     } catch (error) {
-      const logEntity = new LogEntity(`Error ${error}`, LogSeverityLevel.high);
+      const logEntity = new LogEntity({
+        origin: "CheckServiceUC",
+        message: `Error on check service ${url}: ${error}`,
+        level: LogSeverityLevel.high,
+        createdAt: new Date(),
+      });
       this.logRepository.saveLog(logEntity);
       this.errorCallback(`${error}`);
       return false;
