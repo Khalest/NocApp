@@ -42,4 +42,14 @@ export class LogEntity {
     log.createdAt = new Date(createdAt);
     return log;
   }
+
+  static fromObject = (object: Record<string, any>): LogEntity => {
+    const { message, origin, level, createdAt } = object;
+    return new LogEntity({
+      message,
+      origin,
+      level: level as LogSeverityLevel,
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+    });
+  };
 }

@@ -17,7 +17,7 @@ export class Server {
   public static start() {
     console.log("Server started...");
     // Call my UseCase
-    new SendEmailLogs(emailService, fileSystemLogRepository).execute("epsaind@gmail.com");
+    // new SendEmailLogs(emailService, fileSystemLogRepository).execute("epsaind@gmail.com");
 
     //TODO: Uncomment the following lines to test email sending functionality
     // emailService.sendEmail({
